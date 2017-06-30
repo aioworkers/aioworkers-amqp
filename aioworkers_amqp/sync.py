@@ -1,6 +1,5 @@
 """
-Module support amqp
-Required: asynqp
+Module support amqp queue by request
 """
 import asyncio
 from collections import Counter
