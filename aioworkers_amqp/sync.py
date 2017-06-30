@@ -3,9 +3,9 @@ Module support amqp
 Required: asynqp
 """
 import asyncio
+from collections import Counter
 
 import asynqp
-
 from aioworkers.queue.base import AbstractQueue
 
 
@@ -30,12 +30,13 @@ class AmqpQueue(AbstractQueue):
         """
         await super().init()
         self._started = False
+        self._state = Counter()
         self._lock = asyncio.Lock(loop=self.loop)
         await self._lock.acquire()
         self.context.on_start.append(self.start)
         self.context.on_stop.append(self.stop)
 
-    async def start(self):
+    async def start(self, release=True):
         if self._started:
             return
         logger = self.context.logger
@@ -57,7 +58,8 @@ class AmqpQueue(AbstractQueue):
 
         await self.queue.bind(self.exchange, self.config.route_key)
         self._started = True
-        self._lock.release()
+        if release:
+            self._lock.release()
         return self
 
     async def stop(self):
@@ -98,13 +100,24 @@ class AmqpQueue(AbstractQueue):
     async def get(self):
         await self._lock.acquire()
         while True:
-            received_message = await self.queue.get()
+            try:
+                received_message = await self.queue.get()
+            except (RuntimeError, asynqp.AMQPError):
+                self.context.logger.warning('Try reconnect amqp')
+                await self.stop()
+                await asyncio.sleep(self.config.wait, loop=self.loop)
+                await self.start(release=False)
+                self._state['reconnect'] += 1
+                continue
             if received_message is None:
                 self.context.logger.debug('No message')
             else:
                 self._lock.release()
                 return self.decode(received_message)
-            await asyncio.sleep(self.config.wait)
+            await asyncio.sleep(self.config.wait, loop=self.loop)
+
+    async def status(self):
+        return self._state
 
     async def __aenter__(self):
         await self.start()

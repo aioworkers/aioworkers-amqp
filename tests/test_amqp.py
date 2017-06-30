@@ -2,6 +2,8 @@ from aioworkers.amqp import AmqpQueue
 
 
 class MockedAsynqp:
+    AMQPError = RuntimeError
+
     class Message:
         def __init__(self, *args):
             self.a, = args
@@ -24,9 +26,25 @@ async def test_queue(loop, mocker):
     config.connection.auth = {}
     config.connection.host = 'localhost'
     config.connection.port = 5672
+    config.wait = 0
     context = mocker.Mock()
     q = AmqpQueue(config, context=context, loop=loop)
+
+    c = True
+    async def mocked_get():
+        nonlocal c
+        if c:
+            c = False
+            raise RuntimeError
+        else:
+            return q
+
     await q.init()
     async with q:
         await q.put('3')
         await q.get()
+
+        q.queue.get = mocked_get
+        await q.put('4')
+        await q.get()
+    assert {'reconnect': 1} == await q.status()
