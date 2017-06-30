@@ -21,7 +21,7 @@ setup(
     packages=[i for i in find_packages() if i.startswith('aioworkers_amqp')],
     install_requires=requirements,
     license="Apache Software License 2.0",
-    keywords='aioworkers redis',
+    keywords='aioworkers amqp rabbitmq',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
