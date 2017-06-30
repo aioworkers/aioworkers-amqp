@@ -1,4 +1,4 @@
-from aioworkers.amqp import AmqpQueue
+from aioworkers_amqp import AmqpQueue
 
 
 class MockedAsynqp:
@@ -21,7 +21,7 @@ class MockedAsynqp:
 
 
 async def test_queue(loop, mocker):
-    mocker.patch('aioworkers.amqp.asynqp', MockedAsynqp())
+    mocker.patch('aioworkers_amqp.sync.asynqp', MockedAsynqp())
     config = mocker.Mock(format='json')
     config.connection.auth = {}
     config.connection.host = 'localhost'
