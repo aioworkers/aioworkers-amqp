@@ -52,10 +52,12 @@ class AmqpQueue(AbstractQueue):
         self.exchange = await self.channel.declare_exchange(
             self.config.exchange.name, self.config.exchange.type)
         logger.debug('Amqp declare_exchange')
-        self.queue = await self.channel.declare_queue(self.config.queue)
-        logger.debug('Amqp declare_queue')
 
-        await self.queue.bind(self.exchange, self.config.route_key)
+        if self.config.queue:
+            self.queue = await self.channel.declare_queue(self.config.queue)
+            logger.debug('Amqp declare_queue')
+
+            await self.queue.bind(self.exchange, self.config.route_key)
         self._started = True
         if release:
             self._lock.release()
@@ -89,12 +91,22 @@ class AmqpQueue(AbstractQueue):
             return val
         return envelop
 
-    def put_nowait(self, msg):
-        msg = self.encode(msg)
-        self.exchange.publish(msg, self.config.route_key)
+    def reconnect(self):
+        self.context.logger.warning('Try reconnect amqp')
+        await self.stop()
+        await asyncio.sleep(self.config.wait, loop=self.loop)
+        await self.start(release=False)
+        self._state['reconnect'] += 1
 
-    async def put(self, msg):
-        self.put_nowait(msg)
+    def put_nowait(self, msg, route_key = None):
+        msg = self.encode(msg)
+        self.exchange.publish(msg, route_key or self.config.route_key)
+
+    async def put(self, msg, route_key = None):
+        try:
+            self.put_nowait(msg, route_key)
+        except (RuntimeError, asynqp.AMQPError):
+            await self.reconnect()
 
     async def get(self):
         await self._lock.acquire()
@@ -102,11 +114,7 @@ class AmqpQueue(AbstractQueue):
             try:
                 received_message = await self.queue.get()
             except (RuntimeError, asynqp.AMQPError):
-                self.context.logger.warning('Try reconnect amqp')
-                await self.stop()
-                await asyncio.sleep(self.config.wait, loop=self.loop)
-                await self.start(release=False)
-                self._state['reconnect'] += 1
+                await self.reconnect()
                 continue
             if received_message is None:
                 self.context.logger.debug('No message')

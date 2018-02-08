@@ -13,7 +13,7 @@ test_requirements = [
 
 setup(
     name='aioworkers-amqp',
-    version='0.1.0',
+    version='0.1.1',
     description="Module for working with amqp broker",
     author="Alexander Malev",
     author_email='yttrium@somedev.ru',
