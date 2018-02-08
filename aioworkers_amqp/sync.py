@@ -53,11 +53,13 @@ class AmqpQueue(AbstractQueue):
             self.config.exchange.name, self.config.exchange.type)
         logger.debug('Amqp declare_exchange')
 
-        if self.config.queue:
+        if self.config.get('queue'):
             self.queue = await self.channel.declare_queue(self.config.queue)
-            logger.debug('Amqp declare_queue')
-
+            logger.debug('Amqp declare_queue %s', self.config.queue)
             await self.queue.bind(self.exchange, self.config.route_key)
+            logger.debug('Amqp bind %s queue with route_key %s',
+                         self.config.queue, self.config.route_key)
+
         self._started = True
         if release:
             self._lock.release()
@@ -70,11 +72,11 @@ class AmqpQueue(AbstractQueue):
             await self._lock.acquire()
         try:
             await self.channel.close()
-        except:
+        except Exception:
             pass
         try:
             await self.connection.close()
-        except:
+        except Exception:
             pass
         self._started = False
 
@@ -91,18 +93,18 @@ class AmqpQueue(AbstractQueue):
             return val
         return envelop
 
-    def reconnect(self):
+    async def reconnect(self):
         self.context.logger.warning('Try reconnect amqp')
         await self.stop()
         await asyncio.sleep(self.config.wait, loop=self.loop)
         await self.start(release=False)
         self._state['reconnect'] += 1
 
-    def put_nowait(self, msg, route_key = None):
+    def put_nowait(self, msg, route_key=None):
         msg = self.encode(msg)
         self.exchange.publish(msg, route_key or self.config.route_key)
 
-    async def put(self, msg, route_key = None):
+    async def put(self, msg, route_key=None):
         try:
             self.put_nowait(msg, route_key)
         except (RuntimeError, asynqp.AMQPError):
